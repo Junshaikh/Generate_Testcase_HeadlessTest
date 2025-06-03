@@ -1,3 +1,4 @@
+# cli.py
 import os
 import re
 import google.generativeai as genai
@@ -59,7 +60,8 @@ def generate_test_cases(requirement, squad, custom_filename=None, tag=None, othe
     with open(local_path, "w") as file:
         file.write(test_cases)
 
-    print(f"✅ Test cases saved to {local_path}")
+    print("\n📦 Sample Output from AI (for {}):\n\n{}".format(requirement, test_cases))
+    print(f"\n✅ Test cases saved to {local_path}")
 
     if not skip_upload:
         upload_to_github(test_cases, final_filename, squad)
@@ -69,7 +71,7 @@ def generate_test_cases(requirement, squad, custom_filename=None, tag=None, othe
 def upload_to_github(content, file_name, squad):
     github_token = os.getenv("GITHUB_TOKEN")
     repo_owner = os.getenv("GITHUB_REPO_OWNER")
-    repo_name = "Generate_Testcase_HeadlessTest"
+    repo_name = os.getenv("GITHUB_REPO_NAME", "Generate_Testcase_HeadlessTest")
     file_path = f"test-cases/{squad}/{file_name}"
     branch = os.getenv("GITHUB_BRANCH", "main")
 
