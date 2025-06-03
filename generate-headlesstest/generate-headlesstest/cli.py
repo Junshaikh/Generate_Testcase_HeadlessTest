@@ -31,7 +31,7 @@ def get_unique_filename(folder_path, base_filename):
         counter += 1
     return os.path.basename(full_path)
 
-def generate_test_cases(requirement, squad, custom_filename=None, skip_upload=False):
+def generate_test_cases(requirement, squad, custom_filename=None, tag=None, other_tags=None, skip_upload=False):
     squad = sanitize_filename(squad)
     suggested_filename = sanitize_filename(requirement)
     base_filename = sanitize_filename(custom_filename) if custom_filename else suggested_filename
@@ -50,6 +50,12 @@ def generate_test_cases(requirement, squad, custom_filename=None, skip_upload=Fa
     test_cases_raw = response.text
     test_cases = clean_gherkin_output(test_cases_raw)
 
+    tags_line = f"@{tag}" if tag else ""
+    if other_tags:
+        tags_line += " " + " ".join(t.strip() for t in other_tags.split(","))
+    if tags_line.strip():
+        test_cases = f"{tags_line.strip()}\n\n" + test_cases
+
     with open(local_path, "w") as file:
         file.write(test_cases)
 
@@ -63,7 +69,7 @@ def generate_test_cases(requirement, squad, custom_filename=None, skip_upload=Fa
 def upload_to_github(content, file_name, squad):
     github_token = os.getenv("GITHUB_TOKEN")
     repo_owner = os.getenv("GITHUB_REPO_OWNER")
-    repo_name = os.getenv("GITHUB_REPO_NAME")
+    repo_name = "Generate_Testcase_HeadlessTest"
     file_path = f"test-cases/{squad}/{file_name}"
     branch = os.getenv("GITHUB_BRANCH", "main")
 
@@ -89,15 +95,24 @@ def upload_to_github(content, file_name, squad):
     else:
         print(f"❌ Failed to upload file: {response.status_code} - {response.text}")
 
-
 def main():
     parser = argparse.ArgumentParser(description="Generate Gherkin test cases from a requirement.")
     parser.add_argument("--requirement", "-r", help="Requirement description", default=os.getenv("REQUIREMENT"))
     parser.add_argument("--squad", "-s", help="Squad name (e.g., squad-auth)", default=os.getenv("SQUAD"))
     parser.add_argument("--filename", "-f", help="Custom file name", default=os.getenv("FILENAME"))
+    parser.add_argument("--tag", help="Primary tag (e.g., P0, P1)", default=os.getenv("TAG"))
+    parser.add_argument("--other-tags", help="Other tags (e.g., @smoke,@login)", default=os.getenv("OTHER_TAGS"))
     parser.add_argument("--no-upload", action="store_true", default=os.getenv("NO_UPLOAD") == "true")
 
     args = parser.parse_args()
-    generate_test_cases(args.requirement, args.squad, args.filename, not args.no_upload)
+    generate_test_cases(
+        args.requirement,
+        args.squad,
+        args.filename,
+        args.tag,
+        args.other_tags,
+        skip_upload=args.no_upload
+    )
 
-
+if __name__ == "__main__":
+    main()
