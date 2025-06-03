@@ -29,7 +29,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.10
+          python-version: '3.10'
 
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -60,12 +60,18 @@ jobs:
 
       - name: Run Integration Tests
         run: |
-          echo "Running all integration tests..."
+          echo "🧪 Running all integration tests..."
           flutter test integration_test/
 
-          # Optional: Filter tests based on tags
-          echo "Detected tags: ${{ github.event.inputs.other_tags }}"
-          if [[ "${{ github.event.inputs.other_tags }}" == *"@login"* ]]; then
-            echo "🧪 Running login-related tests"
+          TAGS="${{ github.event.inputs.other_tags }}"
+          echo "Detected tags: $TAGS"
+
+          if [[ "$TAGS" == *"@login"* ]]; then
+            echo "🔐 Running login-related tests"
             flutter test integration_test/login/
+          fi
+
+          if [[ "$TAGS" == *"@smoke"* ]]; then
+            echo "🔥 Running smoke tests"
+            flutter test integration_test/smoke/
           fi
