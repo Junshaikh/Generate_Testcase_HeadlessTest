@@ -1,77 +1,47 @@
-name: Generate and Run Tests
+name: Generate Tests
 
 on:
   workflow_dispatch:
     inputs:
       requirement:
-        description: 'Requirement (in plain English)'
+        description: "Requirement description"
         required: true
       squad:
-        description: 'Squad name (e.g., squad-auth)'
+        description: "Squad name"
         required: true
-      file_name:
-        description: 'Custom file name (optional)'
+      filename:
+        description: "Custom filename"
         required: false
       tag:
-        description: 'Priority tag (e.g., P0, P1)'
+        description: "Primary tag"
         required: false
-      other_tags:
-        description: 'Other tags (e.g., @smoke, @login)'
+      other-tags:
+        description: "Other tags (comma-separated)"
         required: false
 
 jobs:
-  generate-tests:
+  generate:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: 3.10
 
       - name: Install dependencies
-        run: pip install -r requirement.txt
+        run: pip install .
 
-      - name: Generate test cases
+      - name: Run test case generator
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO_OWNER: ${{ github.repository_owner }}
         run: |
           generate-tests \
             --requirement "${{ github.event.inputs.requirement }}" \
             --squad "${{ github.event.inputs.squad }}" \
-            --file-name "${{ github.event.inputs.file_name }}" \
+            --filename "${{ github.event.inputs.filename }}" \
             --tag "${{ github.event.inputs.tag }}" \
-            --other-tags "${{ github.event.inputs.other_tags }}"
-
-  run-flutter-tests:
-    needs: generate-tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.19.0'
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Run Integration Tests
-        run: |
-          echo "🧪 Running all integration tests..."
-          flutter test integration_test/
-
-          TAGS="${{ github.event.inputs.other_tags }}"
-          echo "Detected tags: $TAGS"
-
-          if [[ "$TAGS" == *"@login"* ]]; then
-            echo "🔐 Running login-related tests"
-            flutter test integration_test/login/
-          fi
-
-          if [[ "$TAGS" == *"@smoke"* ]]; then
-            echo "🔥 Running smoke tests"
-            flutter test integration_test/smoke/
-          fi
+            --other-tags "${{ github.event.inputs.other-tags }}"
