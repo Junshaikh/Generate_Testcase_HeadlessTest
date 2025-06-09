@@ -44,6 +44,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install .
 
+      - name: Install Python package
+        run: pip install .
+
       - name: Generate healess test
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
@@ -59,3 +62,7 @@ jobs:
             --tag "${{ github.event.inputs.tag }}" \
             --other-tags "${{ github.event.inputs.other-tags }}" \
             --additional-background "${{ github.event.inputs.additional-background }}"
+
+
+      
+
