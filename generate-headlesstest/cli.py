@@ -7,6 +7,7 @@ import argparse
 from dotenv import load_dotenv
 load_dotenv()
 
+# Load Gemini API key
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 def clean_gherkin_output(text):
@@ -30,72 +31,6 @@ def get_unique_filename(folder_path, base_filename):
         counter += 1
     return os.path.basename(full_path)
 
-def generate_test_cases(requirement, squad, custom_filename=None, skip_upload=False, tag=None, other_tags=None, background=None, additional_background=None):
-    squad = sanitize_filename(squad)
-    suggested_filename = sanitize_filename(requirement)
-    base_filename = sanitize_filename(custom_filename) if custom_filename else suggested_filename
-    folder_path = f"test-cases/{squad}"
-    os.makedirs(folder_path, exist_ok=True)
-
-    final_filename = get_unique_filename(folder_path, base_filename)
-    local_path = os.path.join(folder_path, final_filename)
-
-    model = genai.GenerativeModel("gemini-2.0-flash")
-
-    # Construct prompt
-    prompt = (
-        f"You are a QA engineer for Talabat, a food delivery application like DoorDash or Uber Eats or Noon or Careem.\n"
-        f"Generate Gherkin-style functional test cases based on the following requirement:\n\n"
-        f"{requirement.strip()}\n\n"
-    )
-
-    if background:
-        prompt += (
-            f"Include this background in the test cases:\n"
-            f"- This is for Talabat food delivery application\n"
-            f"- {background.strip()}\n"
-        )
-    else:
-        prompt += (
-            f"Assume this is for Talabat food delivery app. Your scenarios should reflect that domain.\n"
-        )
-
-    if additional_background:
-        prompt += f"Additional setup context (include in Background):\n- {additional_background.strip()}\n"
-
-    prompt += (
-        "\n\nImportant:\n"
-        "- Only return valid clean Gherkin syntax (no markdown, no ```gherkin).\n"
-        "- Include a `Background:` section before scenarios.\n"
-        "- Test scenarios should focus on the Talabat app (ordering food, grocery, medicine, dineout, talabat mart quick delivery, pickup food, payments, delivery, etc).\n"
-    )
-
-    response = model.generate_content(prompt)
-    test_cases_raw = response.text
-    test_cases = clean_gherkin_output(test_cases_raw)
-
-    # Build tag line
-    tags_line = []
-    if tag:
-        tags_line.append(f"@{tag}")
-    if other_tags:
-        extra_tags = re.split(r"[,\s]+", other_tags.strip())
-        tags_line.extend([t if t.startswith("@") else f"@{t}" for t in extra_tags if t])
-
-    if tags_line:
-        test_cases = " ".join(tags_line) + "\n\n" + test_cases
-
-    with open(local_path, "w") as file:
-        file.write(test_cases)
-
-    print(f"✅ Test cases saved to {local_path}")
-
-    if not skip_upload:
-        upload_to_github(test_cases, final_filename, squad, tag, other_tags)
-    else:
-        print("⚠️ Skipping GitHub upload (--no-upload enabled)")
-
-
 def generate_flutter_test_code(gherkin_text, squad, base_filename):
     model = genai.GenerativeModel("gemini-2.0-flash")
     prompt = (
@@ -117,6 +52,60 @@ def generate_flutter_test_code(gherkin_text, squad, base_filename):
 
     print(f"🧪 Headless Flutter test code saved to {flutter_file_path}")
 
+def generate_test_cases(requirement, squad, custom_filename=None, skip_upload=False, tag=None, other_tags=None, background=None, additional_background=None):
+    squad = sanitize_filename(squad)
+    suggested_filename = sanitize_filename(requirement)
+    base_filename = sanitize_filename(custom_filename) if custom_filename else suggested_filename
+    folder_path = f"test-cases/{squad}"
+    os.makedirs(folder_path, exist_ok=True)
+
+    final_filename = get_unique_filename(folder_path, base_filename)
+    local_path = os.path.join(folder_path, final_filename)
+
+    model = genai.GenerativeModel("gemini-2.0-flash")
+
+    prompt = (
+        f"You are an expert QA engineer for a Talabat-like food delivery application.\n"
+        f"Generate test cases in Gherkin format for the following requirement:\n\n"
+        f"{requirement}\n\n"
+    )
+    if background:
+        prompt += f"Assume the user is interacting with the following application background: {background}.\n"
+    if additional_background:
+        prompt += f"Additional background setup: {additional_background}.\n"
+
+    prompt += (
+        "Output must be in clean Gherkin syntax without any markdown formatting.\n"
+        "Include a Background section where necessary.\n"
+    )
+
+    response = model.generate_content(prompt)
+    test_cases_raw = response.text
+    test_cases = clean_gherkin_output(test_cases_raw)
+
+    # Tag line
+    tags_line = []
+    if tag:
+        tags_line.append(f"@{tag}")
+    if other_tags:
+        extra_tags = re.split(r"[,\s]+", other_tags.strip())
+        tags_line.extend([t if t.startswith("@") else f"@{t}" for t in extra_tags if t])
+
+    if tags_line:
+        test_cases = " ".join(tags_line) + "\n\n" + test_cases
+
+    with open(local_path, "w") as file:
+        file.write(test_cases)
+
+    print(f"✅ Test cases saved to {local_path}")
+
+    # Generate Flutter headless test
+    generate_flutter_test_code(test_cases, squad, final_filename)
+
+    if not skip_upload:
+        upload_to_github(test_cases, final_filename, squad, tag, other_tags)
+    else:
+        print("⚠️ Skipping GitHub upload (--no-upload enabled)")
 
 def upload_to_github(content, file_name, squad, tag=None, other_tags=None):
     github_token = os.getenv("GITHUB_TOKEN")
@@ -165,15 +154,12 @@ def main():
     parser.add_argument("--file-name", "-f", help="Custom file name", default=os.getenv("FILE_NAME"))
     parser.add_argument("--tag", "-t", help="Priority tag (e.g., P0, P1)", default=os.getenv("TAG"))
     parser.add_argument("--other-tags", help="Other tags (e.g., smoke, login)", default=os.getenv("OTHER_TAGS"))
-    parser.add_argument("--background", help="Primary background context", default=os.getenv("BACKGROUND"))
-    parser.add_argument("--additional-background", help="Extra background info (e.g., logged-in user)", default=os.getenv("ADDITIONAL_BACKGROUND"))
+    parser.add_argument("--background", help="Application background context", default=os.getenv("BACKGROUND"))
+    parser.add_argument("--additional-background", help="Additional test background (e.g., user is logged in)", default=os.getenv("ADDITIONAL_BACKGROUND"))
     parser.add_argument("--no-upload", action="store_true", default=os.getenv("NO_UPLOAD") == "true")
 
     args = parser.parse_args()
-    generate_test_cases(
-        args.requirement, args.squad, args.file_name, args.no_upload,
-        args.tag, args.other_tags, args.background, args.additional_background
-    )
+    generate_test_cases(args.requirement, args.squad, args.file_name, args.no_upload, args.tag, args.other_tags, args.background, args.additional_background)
 
 if __name__ == "__main__":
     main()
