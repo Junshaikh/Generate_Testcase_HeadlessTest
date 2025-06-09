@@ -163,3 +163,27 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+def main_generate_tests():
+    parser = argparse.ArgumentParser(description="Generate Gherkin test cases from a requirement.")
+    parser.add_argument("--requirement", "-r", help="Requirement description", default=os.getenv("REQUIREMENT"))
+    parser.add_argument("--squad", "-s", help="Squad name (e.g., squad-auth)", default=os.getenv("SQUAD"))
+    parser.add_argument("--file-name", "-f", help="Custom file name", default=os.getenv("FILE_NAME"))
+    parser.add_argument("--tag", "-t", help="Priority tag (e.g., P0, P1)", default=os.getenv("TAG"))
+    parser.add_argument("--other-tags", help="Other tags (e.g., smoke, login)", default=os.getenv("OTHER_TAGS"))
+    parser.add_argument("--background", help="Background context (e.g., Talabat food application)", default=os.getenv("BACKGROUND"))
+    parser.add_argument("--additional-background", help="Additional background (e.g., logged-in user)", default=os.getenv("ADDITIONAL_BACKGROUND"))
+    parser.add_argument("--no-upload", action="store_true", default=os.getenv("NO_UPLOAD") == "true")
+    args = parser.parse_args()
+    generate_test_cases(args.requirement, args.squad, args.file_name, args.no_upload, args.tag, args.other_tags, args.background, args.additional_background)
+
+def main_generate_headless_tests():
+    parser = argparse.ArgumentParser(description="Generate Flutter headless test code from a requirement.")
+    parser.add_argument("--requirement", "-r", help="Requirement description", default=os.getenv("REQUIREMENT"))
+    parser.add_argument("--squad", "-s", help="Squad name (e.g., squad-auth)", default=os.getenv("SQUAD"))
+    parser.add_argument("--file-name", "-f", help="Custom file name", default=os.getenv("FILE_NAME"))
+    parser.add_argument("--background", help="Background context (e.g., Talabat food application)", default=os.getenv("BACKGROUND"))
+    parser.add_argument("--additional-background", help="Additional background (e.g., logged-in user)", default=os.getenv("ADDITIONAL_BACKGROUND"))
+    args = parser.parse_args()
+    generate_headless_flutter_test(args.requirement, args.squad, args.file_name, args.background, args.additional_background)
+
