@@ -1,14 +1,12 @@
-# cli_tool/cli.py
-
 import os
 import re
-import argparse
-import base64
-import requests
 import google.generativeai as genai
+import requests
+import base64
+import argparse
 from dotenv import load_dotenv
-
 load_dotenv()
+
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 def clean_gherkin_output(text):
@@ -46,16 +44,18 @@ def upload_to_github(content, file_name, folder, tag=None, other_tags=None):
     }
 
     file_url = f"https://github.com/{repo_owner}/{repo_name}/blob/{branch}/{file_path}"
+
     tag_msg = ""
     if tag or other_tags:
-        tags = []
+        combined_tags = []
         if tag:
-            tags.append(f"`@{tag}`")
+            combined_tags.append(f"`@{tag}`")
         if other_tags:
-            tags.extend([f"`@{t.strip()}`" for t in re.split(r"[,\s]+", other_tags) if t])
-        tag_msg = "\n\n**Tags**: " + ", ".join(tags)
+            extra_tags = re.split(r"[,\s]+", other_tags.strip())
+            combined_tags.extend([f"`@{t}`" if not t.startswith("@") else f"`{t}`" for t in extra_tags if t])
+        tag_msg = "\n\n**Tags**: " + ", ".join(combined_tags)
 
-    message = f"Add test cases for `{file_name}` in `{folder}` folder.{tag_msg}\n\nPreview: {file_url}"
+    message = f"Add test for `{file_name}` in `{folder}` folder.{tag_msg}\n\nPreview: {file_url}"
     encoded_content = base64.b64encode(content.encode()).decode()
 
     data = {
@@ -68,83 +68,111 @@ def upload_to_github(content, file_name, folder, tag=None, other_tags=None):
     if response.status_code in [200, 201]:
         print(f"✅ Uploaded to GitHub: {file_url}")
     else:
-        print(f"❌ GitHub upload failed: {response.status_code} - {response.text}")
+        print(f"❌ Failed to upload file: {response.status_code} - {response.text}")
 
-def main_generate_tests():
-    parser = argparse.ArgumentParser(description="Generate Gherkin test cases from a requirement.")
-    parser.add_argument("--requirement", required=True)
-    parser.add_argument("--squad", required=True)
-    parser.add_argument("--file-name", default=None)
-    parser.add_argument("--tag", default=None)
-    parser.add_argument("--other-tags", default=None)
-    parser.add_argument("--background", default=None)
-    parser.add_argument("--additional-background", default=None)
-    parser.add_argument("--no-upload", action="store_true")
-
-    args = parser.parse_args()
-
-    squad = sanitize_filename(args.squad)
-    base_filename = sanitize_filename(args.file_name or args.requirement)
+def generate_test_cases(requirement, squad, custom_filename=None, skip_upload=False, tag=None, other_tags=None, additional_background=None):
+    squad = sanitize_filename(squad)
+    suggested_filename = sanitize_filename(requirement)
+    base_filename = sanitize_filename(custom_filename) if custom_filename else suggested_filename
     folder_path = f"test-cases/{squad}"
     os.makedirs(folder_path, exist_ok=True)
+
     final_filename = get_unique_filename(folder_path, base_filename)
     local_path = os.path.join(folder_path, final_filename)
 
+    model = genai.GenerativeModel("gemini-1.5-flash")
+
     prompt = (
-        f"You are generating test cases for a food delivery application called '{args.background}'. "
-        f"Requirement: {args.requirement}\n"
-        f"Additional background: {args.additional_background or 'N/A'}\n"
-        "Generate clean Gherkin scenarios. Do not use markdown. Do not number scenarios."
+        f"You are an experienced QA tester for the Talabat food application.\n"
+        f"Generate clean Gherkin test cases for the following requirement:\n"
+        f"\"{requirement}\"\n"
     )
+    if additional_background:
+        prompt += f"\nAdditional context: {additional_background}\n"
 
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    test_cases = clean_gherkin_output(model.generate_content(prompt).text)
+    prompt += "Output should only contain plain Gherkin format. Do not use markdown or scenario numbers."
 
-    # Add tags
+    response = model.generate_content(prompt)
+    test_cases_raw = response.text
+    test_cases = clean_gherkin_output(test_cases_raw)
+
+    # Add tags if needed
     tags_line = []
-    if args.tag:
-        tags_line.append(f"@{args.tag}")
-    if args.other_tags:
-        tags_line += [f"@{t}" for t in re.split(r"[,\s]+", args.other_tags.strip()) if t]
+    if tag:
+        tags_line.append(f"@{tag}")
+    if other_tags:
+        extra_tags = re.split(r"[,\s]+", other_tags.strip())
+        tags_line.extend([t if t.startswith("@") else f"@{t}" for t in extra_tags if t])
     if tags_line:
         test_cases = " ".join(tags_line) + "\n\n" + test_cases
 
-    with open(local_path, "w") as f:
-        f.write(test_cases)
+    with open(local_path, "w") as file:
+        file.write(test_cases)
+
     print(f"✅ Test cases saved to {local_path}")
 
-    if not args.no_upload:
-        upload_to_github(test_cases, final_filename, f"test-cases/{squad}", args.tag, args.other_tags)
+    if not skip_upload:
+        upload_to_github(test_cases, final_filename, f"test-cases/{squad}", tag, other_tags)
+    else:
+        print("⚠️ Skipping GitHub upload (--no-upload enabled)")
 
-def main_generate_headless_tests():
-    parser = argparse.ArgumentParser(description="Generate headless Flutter test code from a requirement.")
-    parser.add_argument("--requirement", required=True)
-    parser.add_argument("--squad", required=True)
-    parser.add_argument("--file-name", default=None)
-    parser.add_argument("--no-upload", action="store_true")
-
-    args = parser.parse_args()
-
-    squad = sanitize_filename(args.squad)
-    base_filename = sanitize_filename(args.file_name or args.requirement)
+def generate_headless_flutter_tests(requirement, squad, custom_filename=None, skip_upload=False, tag=None, other_tags=None, additional_background=None):
+    squad = sanitize_filename(squad)
+    suggested_filename = sanitize_filename(requirement)
+    base_filename = sanitize_filename(custom_filename) if custom_filename else suggested_filename
     folder_path = f"headless-test/{squad}"
     os.makedirs(folder_path, exist_ok=True)
+
     final_filename = get_unique_filename(folder_path, base_filename)
     local_path = os.path.join(folder_path, final_filename)
 
+    model = genai.GenerativeModel("gemini-1.5-flash")
+
     prompt = (
-        f"Generate headless Flutter test code for the following food delivery requirement:\n"
-        f"{args.requirement}\n\n"
-        f"Ensure the code is valid Dart and compatible with `flutter test`. "
-        f"Do not include markdown or explanations."
+        f"You are an expert Flutter automation engineer. Based on the Talabat food application, "
+        f"generate headless Flutter integration test code in Dart for this requirement:\n"
+        f"\"{requirement}\"\n"
     )
+    if additional_background:
+        prompt += f"\nAdditional context: {additional_background}\n"
 
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    test_code = model.generate_content(prompt).text.strip()
+    prompt += "Only return clean Dart code. Do not include markdown, explanations, or extra formatting."
 
-    with open(local_path, "w") as f:
-        f.write(test_code)
+    response = model.generate_content(prompt)
+    test_code = response.text.strip()
+
+    with open(local_path, "w") as file:
+        file.write(test_code)
+
     print(f"✅ Headless Flutter test saved to {local_path}")
 
-    if not args.no_upload:
-        upload_to_github(test_code, final_filename, f"headless-test/{squad}")
+    if not skip_upload:
+        upload_to_github(test_code, final_filename, f"headless-test/{squad}", tag, other_tags)
+    else:
+        print("⚠️ Skipping GitHub upload (--no-upload enabled)")
+
+def main():
+    parser = argparse.ArgumentParser(description="Generate Gherkin test cases from a requirement.")
+    parser.add_argument("--requirement", "-r", required=True, help="Requirement description")
+    parser.add_argument("--squad", "-s", required=True, help="Squad name (e.g., squad-auth)")
+    parser.add_argument("--file-name", "-f", help="Custom file name", default=os.getenv("FILE_NAME"))
+    parser.add_argument("--tag", "-t", help="Priority tag (e.g., P0, P1)", default=os.getenv("TAG"))
+    parser.add_argument("--other-tags", help="Other tags (e.g., smoke, login)", default=os.getenv("OTHER_TAGS"))
+    parser.add_argument("--additional-background", help="Additional background like login status", default=os.getenv("ADDITIONAL_BACKGROUND"))
+    parser.add_argument("--no-upload", action="store_true", default=os.getenv("NO_UPLOAD") == "true")
+
+    args = parser.parse_args()
+    generate_test_cases(args.requirement, args.squad, args.file_name, args.no_upload, args.tag, args.other_tags, args.additional_background)
+
+def main_generate_headless_tests():
+    parser = argparse.ArgumentParser(description="Generate headless Flutter test code from a requirement.")
+    parser.add_argument("--requirement", "-r", required=True, help="Requirement description")
+    parser.add_argument("--squad", "-s", required=True, help="Squad name (e.g., squad-auth)")
+    parser.add_argument("--file-name", "-f", help="Custom file name", default=os.getenv("FILE_NAME"))
+    parser.add_argument("--tag", "-t", help="Priority tag (e.g., P0, P1)", default=os.getenv("TAG"))
+    parser.add_argument("--other-tags", help="Other tags (e.g., smoke, login)", default=os.getenv("OTHER_TAGS"))
+    parser.add_argument("--additional-background", help="Additional background like login status", default=os.getenv("ADDITIONAL_BACKGROUND"))
+    parser.add_argument("--no-upload", action="store_true", default=os.getenv("NO_UPLOAD") == "true")
+
+    args = parser.parse_args()
+    generate_headless_flutter_tests(args.requirement, args.squad, args.file_name, args.no_upload, args.tag, args.other_tags, args.additional_background)
