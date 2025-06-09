@@ -7,12 +7,12 @@ setup(
     install_requires=[
         "python-dotenv",
         "google-generativeai",
-        "requests",
+        "requests"
     ],
     entry_points={
         "console_scripts": [
-            "generate-tests = cli:main_generate_tests",
-            "generate-headlesstest = cli:main_generate_headless_tests",
-        ],
-    },
+            "generate-tests = cli_tool.cli:main_generate_tests",
+            "generate-headlesstest = cli_tool.cli:main_generate_headless_tests",
+        ]
+    }
 )
