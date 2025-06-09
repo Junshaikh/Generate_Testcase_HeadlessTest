@@ -1,17 +1,18 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='generate-tests',
-    version='0.1.0',
-    py_modules=['cli'],
+    name="testcase-generator",
+    version="0.1",
+    packages=find_packages(),
     install_requires=[
-        'google-generativeai',
-        'requests',
-        'python-dotenv'
+        "python-dotenv",
+        "google-generativeai",
+        "requests",
     ],
     entry_points={
-        'console_scripts': [
-            'generate-tests = cli:main',
+        "console_scripts": [
+            "generate-tests = cli:main_generate_tests",
+            "generate-headlesstest = cli:main_generate_headless_tests",
         ],
     },
 )
